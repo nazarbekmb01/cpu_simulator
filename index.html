@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Von Neumann CPU Simulator — Fetch · Decode · Execute</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b0d12;--panel:#151922;--line:#2a3140;--txt:#e9edf3;--mut:#9aa3b2;--cyan:#29b6f6;--orange:#ff7a1a;--pink:#ff5fb8;--purple:#7c4dff;--lime:#c6e65a;--red:#ff5252;--blue:#42a5f5;--yellow:#ffd54f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font-family:Inter,system-ui,sans-serif}
+header{display:flex;align-items:center;gap:14px;padding:14px 20px 8px;flex-wrap:wrap}
+h1{font-family:Montserrat,'Arial Black',Arial,sans-serif;font-weight:900;font-size:22px;margin:0;letter-spacing:.5px}
+h1 span{color:var(--cyan)}
+.tag{font-size:12px;color:var(--mut);border:1px solid var(--line);border-radius:20px;padding:3px 10px}
+main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;padding:6px 20px 20px}
+@media(max-width:1100px){main{grid-template-columns:1fr}}
+#wrap{position:relative;width:100%;background:radial-gradient(ellipse at 50% 30%,#161a23,#07080b 75%);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+#board{position:absolute;left:0;top:0;width:1200px;height:660px;transform-origin:0 0;font-family:Montserrat,'Arial Black',Arial,sans-serif}
+.box{position:absolute;border-radius:12px}
+.cpu{left:20px;top:20px;width:620px;height:620px;background:#211b45;border:3px solid var(--purple)}
+.cpu>.lbl,.ram>.lbl{position:absolute;left:16px;top:8px;font-weight:900;font-size:20px;color:#cbbcff;letter-spacing:1px}
+.ram{left:830px;top:20px;width:350px;height:620px;background:#24122a;border:3px solid var(--pink)}
+.ram>.lbl{color:#ffb3e0}
+.u{position:absolute;border-radius:10px;border:3px solid rgba(255,255,255,.18);transition:box-shadow .25s,border-color .25s,transform .25s;color:#1a1c22}
+.u .n{position:absolute;left:12px;top:8px;font-weight:900;font-size:24px}
+.u .f{position:absolute;left:12px;bottom:6px;font-family:Inter;font-weight:600;font-size:12px;color:#4a4f57}
+.u .v{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-weight:900;font-size:30px;color:#c62828;max-width:170px;text-align:right;white-space:nowrap}
+.u.glow{border-color:var(--cyan);box-shadow:0 0 26px 8px rgba(41,182,246,.75);transform:scale(1.03)}
+.reg{background:#f3ead6;width:290px;height:92px;left:330px}
+#CU{left:40px;top:60px;width:270px;height:160px;background:#ffab6e}
+#ALU{left:40px;top:240px;width:270px;height:120px;background:#5fd6e6}
+#ACC{left:40px;top:380px;width:270px;height:100px;background:#ffe7a3}
+#OUT{left:40px;top:500px;width:270px;height:120px;background:#0f1320;border-color:#3b4a66;color:#fff}
+#OUT .n{color:#7fd3ff;font-size:18px}
+#OUT .v{color:#fff;font-size:22px;right:auto;left:14px;top:auto;bottom:10px;transform:none;max-width:240px;white-space:normal;text-align:left;font-family:Inter}
+#PC{top:60px}#CIR{top:170px}#MAR{top:280px}#MDR{top:390px}
+#CU .v{font-size:20px;top:auto;bottom:10px;transform:none;color:#5a2a00}
+.stages{position:absolute;left:12px;top:72px;display:flex;gap:6px}
+.st{font-family:Inter;font-weight:700;font-size:12px;padding:5px 8px;border-radius:14px;background:rgba(0,0,0,.15);color:#6b3a10;transition:.25s}
+.st.on{background:#1a1c22;color:#fff;box-shadow:0 0 14px rgba(0,0,0,.4)}
+.cell{position:absolute;left:880px;width:200px;height:28px;background:#fff6fb;border:3px solid var(--pink);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;color:#2a1530;transition:box-shadow .25s,transform .25s}
+.cell.glow{box-shadow:0 0 22px 7px rgba(255,95,184,.95);transform:scale(1.04)}
+.cell.pc{outline:3px dashed var(--cyan);outline-offset:3px}
+.addr{position:absolute;left:1086px;width:60px;height:28px;display:flex;align-items:center;font-weight:800;font-size:16px;color:#ffb3e0}
+.bus{position:absolute;height:8px;border-radius:4px;opacity:.28;transition:opacity .2s,box-shadow .2s}
+.vbus{position:absolute;width:6px;border-radius:3px;opacity:.22;transition:opacity .2s}
+.bus.on,.vbus.on{opacity:1}
+.blab{position:absolute;font-weight:800;font-size:13px;letter-spacing:.5px}
+#ctrlSig{position:absolute;left:1070px;top:30px;font-weight:900;font-size:14px;padding:3px 10px;border-radius:12px;background:var(--blue);color:#06121f;opacity:0;transition:opacity .2s}
+#pkt{position:absolute;left:0;top:0;min-width:70px;height:40px;padding:0 12px;background:#fff;border:3px solid var(--cyan);border-radius:8px;box-shadow:0 0 22px 6px rgba(41,182,246,.9);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;color:#0b1d3a;opacity:0;z-index:20;white-space:nowrap}
+aside{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.card h2{font-family:Montserrat,Arial,sans-serif;font-size:14px;letter-spacing:1px;color:var(--mut);margin:0 0 8px;text-transform:uppercase}
+#stage{font-family:Montserrat,'Arial Black',Arial,sans-serif;font-weight:900;font-size:26px}
+#en{font-size:17px;line-height:1.45;margin-top:6px;min-height:74px}
+#ru{font-size:14px;line-height:1.4;color:var(--mut);margin-top:8px}
+#hiddenNote{display:none;font-size:16px;color:var(--yellow);margin-top:6px}
+.ctr{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{font-family:Inter;font-weight:700;font-size:15px;border:0;border-radius:10px;padding:10px 14px;background:#263042;color:#fff;cursor:pointer}
+button:hover{background:#31405a}
+button.pri{background:var(--cyan);color:#06121f}
+button:disabled{opacity:.4;cursor:default}
+#count{font-family:Montserrat;font-weight:800;color:var(--mut);margin-left:auto}
+label{font-size:14px;color:var(--mut);display:flex;align-items:center;gap:8px}
+textarea{width:100%;height:200px;background:#0d1017;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;line-height:1.45}
+select{background:#0d1017;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;font-size:14px;width:100%}
+#err{color:#ff8a80;font-size:13px;min-height:16px;margin-top:6px}
+.help{font-size:13px;color:var(--mut);line-height:1.5}
+.help b{color:var(--txt)}
+</style>
+</head>
+<body>
+<header>
+  <h1>VON NEUMANN <span>CPU SIMULATOR</span></h1>
+  <span class="tag">Fetch → Decode → Execute</span>
+  <span class="tag">#Grade8Hardware · 8.HW.01</span>
+</header>
+<main>
+  <section>
+    <div id="wrap"><div id="board">
+      <div class="box cpu"><div class="lbl">CPU</div></div>
+      <div class="box ram"><div class="lbl">MEMORY (RAM)</div></div>
+      <div class="u" id="CU"><div class="n">CONTROL UNIT</div><div class="stages"><span class="st" id="sF">FETCH</span><span class="st" id="sD">DECODE</span><span class="st" id="sE">EXECUTE</span></div><div class="v"></div></div>
+      <div class="u" id="ALU"><div class="n">ALU</div><div class="f">Arithmetic Logic Unit</div><div class="v"></div></div>
+      <div class="u" id="ACC"><div class="n" style="font-size:20px">ACCUMULATOR</div><div class="f">ACC · results</div><div class="v"></div></div>
+      <div class="u" id="OUT"><div class="n">OUTPUT</div><div class="v"></div></div>
+      <div class="u reg" id="PC"><div class="n">PC</div><div class="f">Program Counter</div><div class="v"></div></div>
+      <div class="u reg" id="CIR"><div class="n">CIR</div><div class="f">Current Instruction Register</div><div class="v"></div></div>
+      <div class="u reg" id="MAR"><div class="n">MAR</div><div class="f">Memory Address Register</div><div class="v"></div></div>
+      <div class="u reg" id="MDR"><div class="n">MDR</div><div class="f">Memory Data Register</div><div class="v"></div></div>
+      <div id="buses"></div>
+      <div id="cells"></div>
+      <div id="ctrlSig">READ</div>
+      <div id="pkt"></div>
+    </div></div>
+  </section>
+  <aside>
+    <div class="card">
+      <h2>What is happening</h2>
+      <div id="stage" style="color:var(--mut)">READY</div>
+      <div id="en">Press <b>Step ▶</b> to go one step, or <b>Play</b> to run the program.</div>
+      <div id="hiddenNote">✋ Explain this step in your own words!</div>
+      <div id="ru">Нажмите «Step ▶», чтобы сделать один шаг, или «Play», чтобы запустить программу.</div>
+    </div>
+    <div class="card">
+      <div class="ctr">
+        <button id="bBack" title="Previous step">◀ Back</button>
+        <button id="bStep" class="pri" title="Next step">Step ▶</button>
+        <button id="bPlay">▶ Play</button>
+        <button id="bReset">↺ Reset</button>
+        <span id="count">0 / 0</span>
+      </div>
+      <div class="ctr" style="margin-top:12px">
+        <label>Speed <input type="range" id="speed" min="0.4" max="3" step="0.1" value="1"></label>
+      </div>
+      <div class="ctr" style="margin-top:10px">
+        <label><input type="checkbox" id="hide"> Hide explanation (students explain)</label>
+        <label><input type="checkbox" id="ruOn" checked> Show Russian</label>
+      </div>
+    </div>
+    <div class="card" id="taskCard" style="border-color:#c6e65a">
+      <h2 style="color:#c6e65a">Pair task · 9 − 4</h2>
+      <div class="help" style="font-size:14px;color:var(--txt)">
+        1. Press <b>Start pair task</b> (program 9 − 4).<br>
+        2. Go step by step with <b>Step ▶</b>. Read each step aloud to your partner.<br>
+        3. Watch the buses: which <b>address</b>, which <b>value</b>, which <b>signal</b>?<br>
+        4. Answer the questions in Google Form <b>CP2</b>. You can go <b>◀ Back</b> at any time.
+      </div>
+      <div class="ctr" style="margin-top:10px"><button id="bTask" class="pri" style="background:#c6e65a">Start pair task</button></div>
+    </div>
+    <div class="card">
+      <h2>Program in RAM</h2>
+      <select id="preset"></select>
+      <textarea id="prog" spellcheck="false" style="margin-top:8px"></textarea>
+      <div class="ctr" style="margin-top:8px"><button id="bLoad" class="pri">Load program into RAM</button></div>
+      <div id="err"></div>
+      <div class="help"><b>Format:</b> <code>address: value</code> (addresses 0–15). Numbers are data.<br>
+      <b>Instructions:</b> LOAD n · ADD n · SUB n · STORE n · OUT · JUMP n · JZ n (jump if ACC = 0) · HALT</div>
+    </div>
+  </aside>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const N = 16, CELL0 = 62, CH = 35;
+const cellY = (a) => CELL0 + a * CH;
+const PRESETS = {
+  'Z = X + Y (lesson example)': '0: LOAD 10\n1: ADD 11\n2: STORE 12\n3: OUT\n4: HALT\n10: 2\n11: 3\n12: 0',
+  'Subtraction: 9 − 4': '0: LOAD 8\n1: SUB 9\n2: STORE 10\n3: OUT\n4: HALT\n8: 9\n9: 4\n10: 0',
+  'Count down 3 → 0 (loop with JZ)': '0: LOAD 12\n1: OUT\n2: JZ 6\n3: SUB 13\n4: STORE 12\n5: JUMP 0\n6: HALT\n12: 3\n13: 1',
+  'Bug hunt: what goes wrong? (no HALT)': '0: LOAD 6\n1: ADD 7\n2: STORE 8\n3: OUT\n6: 5\n7: 5\n8: 0',
+};
+// --- layout: buses ---
+const BUS = { control: { y: 150, c: '#42a5f5', x: 794, name: 'CONTROL BUS' }, address: { y: 326, c: '#ff5252', x: 806, name: 'ADDRESS BUS' }, data: { y: 436, c: '#c6e65a', x: 818, name: 'DATA BUS' } };
+(() => {
+  let h = '';
+  for (const [k, b] of Object.entries(BUS)) {
+    h += `<div class="bus" id="bus_${k}" style="left:640px;top:${b.y - 4}px;width:${b.x - 636}px;background:${b.c};box-shadow:0 0 12px ${b.c}"></div>`;
+    if (k !== 'control') h += `<div class="vbus" id="vbus_${k}" style="left:${b.x - 3}px;top:${cellY(0) + 10}px;height:${cellY(N - 1) - cellY(0)}px;background:${b.c}"></div>`;
+    else h += `<div class="vbus" id="vbus_${k}" style="left:${b.x - 3}px;top:62px;height:${b.y - 58}px;background:${b.c}"></div>`;
+    h += `<div class="blab" style="left:652px;top:${b.y + 10}px;color:${b.c}">${b.name}</div>`;
+  }
+  h += `<div class="blab" style="left:652px;top:${BUS.address.y + 28}px;color:#ff8a80;font-size:11px;font-family:Inter">one way: CPU → RAM</div>`;
+  h += `<div class="blab" style="left:652px;top:${BUS.data.y + 28}px;color:#dff09a;font-size:11px;font-family:Inter">two way: CPU ⇄ RAM</div>`;
+  h += `<div class="blab" style="left:652px;top:${BUS.control.y + 28}px;color:#90caf9;font-size:11px;font-family:Inter">READ / WRITE signals</div>`;
+  $('buses').innerHTML = h;
+  let c = '';
+  for (let a = 0; a < N; a++) c += `<div class="cell" id="c${a}" style="top:${cellY(a)}px"></div><div class="addr" style="top:${cellY(a)}px">${a}</div>`;
+  $('cells').innerHTML = c;
+})();
+// anchors (centres)
+const A = { PC: [475, 106], CIR: [475, 216], MAR: [475, 326], MDR: [475, 436], ACC: [175, 430], ALU: [175, 300], CU: [175, 140], OUT: [175, 560] };
+const toCell = (a, bus) => [[620, BUS[bus].y], [BUS[bus].x, BUS[bus].y], [BUS[bus].x, cellY(a) + 14], [980, cellY(a) + 14]];
+const fromCell = (a) => toCell(a, 'data').slice().reverse();
+
+// --- machine ---
+const OPS = ['LOAD', 'ADD', 'SUB', 'STORE', 'OUT', 'JUMP', 'JZ', 'HALT'];
+function parse(text) {
+  const mem = Array(N).fill(0);
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].replace(/#.*/, '').trim(); if (!l) continue;
+    const m = l.match(/^(\d+)\s*:\s*(.+)$/);
+    if (!m) throw `Line ${i + 1}: use the format “address: value”.`;
+    const a = +m[1]; if (a < 0 || a >= N) throw `Line ${i + 1}: address must be 0–15.`;
+    const v = m[2].trim().toUpperCase().replace(/\s+/g, ' ');
+    if (/^-?\d+$/.test(v)) { mem[a] = +v; continue; }
+    const p = v.split(' '); const op = p[0];
+    if (!OPS.includes(op)) throw `Line ${i + 1}: unknown instruction “${p[0]}”.`;
+    const needs = !['OUT', 'HALT'].includes(op);
+    if (needs && (p.length !== 2 || !/^\d+$/.test(p[1]) || +p[1] >= N)) throw `Line ${i + 1}: ${op} needs an address 0–15.`;
+    mem[a] = needs ? `${op} ${+p[1]}` : op;
+  }
+  return mem;
+}
+const MEANING = {
+  LOAD: (n) => [`copy the value at address ${n} into the ACC`, `скопировать значение из адреса ${n} в аккумулятор`],
+  ADD: (n) => [`add the value at address ${n} to the ACC`, `прибавить к ACC значение из адреса ${n}`],
+  SUB: (n) => [`subtract the value at address ${n} from the ACC`, `вычесть из ACC значение из адреса ${n}`],
+  STORE: (n) => [`write the value of the ACC into address ${n}`, `записать значение ACC в адрес ${n}`],
+  OUT: () => [`show the value of the ACC on the output`, `вывести значение ACC`],
+  JUMP: (n) => [`the next instruction is at address ${n} (PC = ${n})`, `следующая команда — по адресу ${n} (PC = ${n})`],
+  JZ: (n) => [`if ACC = 0, jump to address ${n}`, `если ACC = 0, перейти к адресу ${n}`],
+  HALT: () => [`stop the program`, `остановить программу`],
+};
+function build(mem0) {
+  const S = { PC: 0, CIR: '', MAR: '', MDR: '', ACC: 0, ALU: '', CU: '', OUT: [], mem: mem0.slice(), halted: false };
+  const steps = [];
+  const snap = () => JSON.parse(JSON.stringify(S));
+  const push = (stage, en, ru, o = {}) => steps.push(Object.assign({ stage, en, ru, moves: [], glow: [], cells: [], after: null }, o));
+  const fin = () => { steps[steps.length - 1].after = snap(); };
+  let guard = 0;
+  while (!S.halted && guard++ < 60) {
+    const pc = S.PC;
+    // FETCH
+    S.MAR = pc; S.CU = '';
+    push('FETCH', `1. The address in the PC (${pc}) is copied into the MAR.`, `1. Адрес из PC (${pc}) копируется в MAR.`, { moves: [{ path: [A.PC, A.MAR], label: pc }], glow: ['PC', 'MAR'] }); fin();
+    push('FETCH', `2. The MAR sends address ${pc} to memory on the ADDRESS BUS. The CU sends “READ” on the CONTROL BUS.`, `2. MAR отправляет адрес ${pc} в память по шине адреса. CU отправляет сигнал READ по шине управления.`, { moves: [{ path: toCell(pc, 'address'), label: pc, bus: 'address' }], ctrl: 'READ', glow: ['MAR', 'CU'], cells: [pc] }); fin();
+    const ins = S.mem[pc];
+    S.MDR = ins;
+    push('FETCH', `3. Memory sends the instruction “${ins}” on the DATA BUS into the MDR.`, `3. Память отправляет команду «${ins}» по шине данных в MDR.`, { moves: [{ path: fromCell(pc).concat([A.MDR]), label: ins, bus: 'data' }], glow: ['MDR'], cells: [pc] }); fin();
+    S.CIR = ins;
+    push('FETCH', `4. The instruction is copied from the MDR into the CIR.`, `4. Команда копируется из MDR в CIR.`, { moves: [{ path: [A.MDR, A.CIR], label: ins }], glow: ['CIR'] }); fin();
+    S.PC = pc + 1;
+    push('FETCH', `5. The PC increases by 1 (${pc} → ${pc + 1}). Now it points to the next instruction.`, `5. PC увеличивается на 1 (${pc} → ${pc + 1}) и указывает на следующую команду.`, { glow: ['PC'] }); fin();
+    // DECODE
+    const s = String(ins).split(' '); const op = s[0]; const n = s.length > 1 ? +s[1] : null;
+    if (!OPS.includes(op)) {
+      S.CU = 'ERROR'; S.halted = true;
+      push('DECODE', `The CU cannot decode “${ins}”: it is DATA, not an instruction! The program has no HALT, so the CPU ran into the data. The CPU stops.`, `CU не может расшифровать «${ins}»: это ДАННЫЕ, а не команда! В программе нет HALT, процессор дошёл до данных. Остановка.`, { glow: ['CU', 'CIR'] }); fin();
+      break;
+    }
+    const [men, mru] = MEANING[op](n);
+    S.CU = op;
+    push('DECODE', `6. The CU decodes “${ins}”: ${men}.`, `6. CU расшифровывает «${ins}»: ${mru}.`, { glow: ['CU', 'CIR'] }); fin();
+    // EXECUTE
+    const readOperand = () => {
+      S.MAR = n;
+      push('EXECUTE', `The address part (${n}) goes from the CIR into the MAR.`, `Адресная часть (${n}) переходит из CIR в MAR.`, { moves: [{ path: [A.CIR, A.MAR], label: n }], glow: ['MAR'] }); fin();
+      push('EXECUTE', `The MAR sends address ${n} on the ADDRESS BUS; the CU sends “READ”.`, `MAR отправляет адрес ${n} по шине адреса; CU — сигнал READ.`, { moves: [{ path: toCell(n, 'address'), label: n, bus: 'address' }], ctrl: 'READ', glow: ['MAR', 'CU'], cells: [n] }); fin();
+      S.MDR = S.mem[n];
+      push('EXECUTE', `The value ${S.mem[n]} comes back on the DATA BUS into the MDR.`, `Значение ${S.mem[n]} возвращается по шине данных в MDR.`, { moves: [{ path: fromCell(n).concat([A.MDR]), label: S.mem[n], bus: 'data' }], glow: ['MDR'], cells: [n] }); fin();
+    };
+    const num = (v) => (typeof v === 'number' ? v : NaN);
+    if (op === 'LOAD') {
+      readOperand(); S.ACC = S.MDR;
+      push('EXECUTE', `The value ${S.MDR} is copied from the MDR into the ACC. ACC = ${S.ACC}.`, `Значение ${S.MDR} копируется из MDR в ACC. ACC = ${S.ACC}.`, { moves: [{ path: [A.MDR, [330, 436], [330, 430], A.ACC], label: S.MDR }], glow: ['ACC'] }); fin();
+    } else if (op === 'ADD' || op === 'SUB') {
+      readOperand();
+      const a = num(S.ACC), b = num(S.MDR); const sign = op === 'ADD' ? '+' : '−';
+      S.ALU = `${S.ACC} ${sign} ${S.MDR}`;
+      push('EXECUTE', `The ALU takes the ACC (${S.ACC}) and the MDR (${S.MDR}) and calculates ${S.ACC} ${sign} ${S.MDR}.`, `АЛУ берёт ACC (${S.ACC}) и MDR (${S.MDR}) и вычисляет ${S.ACC} ${sign} ${S.MDR}.`, { moves: [{ path: [A.MDR, [330, 436], [330, 300], A.ALU], label: S.MDR }], glow: ['ALU', 'ACC'] }); fin();
+      S.ACC = op === 'ADD' ? a + b : a - b;
+      push('EXECUTE', `The result ${S.ACC} is stored in the ACC.`, `Результат ${S.ACC} сохраняется в ACC.`, { moves: [{ path: [A.ALU, A.ACC], label: S.ACC }], glow: ['ACC'] }); fin();
+      S.ALU = '';
+    } else if (op === 'STORE') {
+      S.MAR = n;
+      push('EXECUTE', `The address ${n} goes from the CIR into the MAR.`, `Адрес ${n} переходит из CIR в MAR.`, { moves: [{ path: [A.CIR, A.MAR], label: n }], glow: ['MAR'] }); fin();
+      S.MDR = S.ACC;
+      push('EXECUTE', `The value of the ACC (${S.ACC}) is copied into the MDR.`, `Значение ACC (${S.ACC}) копируется в MDR.`, { moves: [{ path: [A.ACC, [330, 430], [330, 436], A.MDR], label: S.ACC }], glow: ['MDR'] }); fin();
+      push('EXECUTE', `The MAR sends address ${n} on the ADDRESS BUS. The CU sends “WRITE” on the CONTROL BUS.`, `MAR отправляет адрес ${n} по шине адреса. CU отправляет сигнал WRITE по шине управления.`, { moves: [{ path: toCell(n, 'address'), label: n, bus: 'address' }], ctrl: 'WRITE', glow: ['MAR', 'CU'], cells: [n] }); fin();
+      S.mem[n] = S.MDR;
+      push('EXECUTE', `The value ${S.MDR} travels on the DATA BUS and is written into address ${n}.`, `Значение ${S.MDR} идёт по шине данных и записывается в адрес ${n}.`, { moves: [{ path: [A.MDR].concat(toCell(n, 'data')), label: S.MDR, bus: 'data' }], glow: ['MDR'], cells: [n] }); fin();
+    } else if (op === 'OUT') {
+      S.OUT.push(S.ACC);
+      push('EXECUTE', `The value of the ACC (${S.ACC}) is sent to the output.`, `Значение ACC (${S.ACC}) выводится.`, { moves: [{ path: [A.ACC, A.OUT], label: S.ACC }], glow: ['OUT'] }); fin();
+    } else if (op === 'JUMP') {
+      S.PC = n;
+      push('EXECUTE', `The PC is changed to ${n}. The next fetch starts at address ${n}.`, `PC меняется на ${n}. Следующая выборка начнётся с адреса ${n}.`, { moves: [{ path: [A.CIR, A.PC], label: n }], glow: ['PC'] }); fin();
+    } else if (op === 'JZ') {
+      if (S.ACC === 0) { S.PC = n; push('EXECUTE', `ACC = 0, so the PC is changed to ${n}.`, `ACC = 0, поэтому PC меняется на ${n}.`, { moves: [{ path: [A.CIR, A.PC], label: n }], glow: ['PC', 'ACC'] }); fin(); }
+      else { push('EXECUTE', `ACC = ${S.ACC} (not 0), so nothing happens. The PC stays ${S.PC}.`, `ACC = ${S.ACC} (не 0), ничего не происходит. PC остаётся ${S.PC}.`, { glow: ['ACC'] }); fin(); }
+    } else if (op === 'HALT') {
+      S.halted = true; S.CU = 'HALT';
+      push('EXECUTE', `HALT: the program has finished.`, `HALT: программа закончена.`, { glow: ['CU'] }); fin();
+    }
+    if (!S.halted) {
+      S.CU = '';
+      push('REPEAT', `The cycle repeats: FETCH the next instruction from address ${S.PC}.`, `Цикл повторяется: выборка следующей команды из адреса ${S.PC}.`, { glow: ['PC'] }); fin();
+    }
+  }
+  if (!S.halted) { push('STOP', 'The simulator stopped after 60 instructions (endless loop?).', 'Симулятор остановился после 60 команд (бесконечный цикл?).'); fin(); }
+  return { start: (() => { const s0 = JSON.parse(JSON.stringify({ PC: 0, CIR: '', MAR: '', MDR: '', ACC: 0, ALU: '', CU: '', OUT: [], mem: mem0.slice() })); return s0; })(), steps };
+}
+
+// --- view ---
+let RUN = null, idx = 0, playing = false, anim = null;
+const STC = { FETCH: '#29b6f6', DECODE: '#ff7a1a', EXECUTE: '#c6e65a', REPEAT: '#9aa3b2', STOP: '#ff5252' };
+function showState(S, step) {
+  ['PC', 'CIR', 'MAR', 'MDR', 'ACC', 'ALU', 'CU'].forEach((k) => $(k).querySelector('.v').textContent = S[k] === '' ? '' : S[k]);
+  $('OUT').querySelector('.v').textContent = S.OUT.join('  ');
+  for (let a = 0; a < N; a++) { const c = $('c' + a); c.textContent = S.mem[a]; c.classList.toggle('pc', a === S.PC); }
+  document.querySelectorAll('.u').forEach((u) => u.classList.remove('glow'));
+  document.querySelectorAll('.cell').forEach((u) => u.classList.remove('glow'));
+  ['sF', 'sD', 'sE'].forEach((s) => $(s).classList.remove('on'));
+  if (step) {
+    step.glow.forEach((g) => $(g).classList.add('glow'));
+    step.cells.forEach((a) => $('c' + a).classList.add('glow'));
+    const m = { FETCH: 'sF', DECODE: 'sD', EXECUTE: 'sE' }[step.stage]; if (m) $(m).classList.add('on');
+    $('stage').textContent = step.stage; $('stage').style.color = STC[step.stage];
+    $('en').textContent = step.en; $('ru').textContent = step.ru;
+  } else {
+    $('stage').textContent = 'READY'; $('stage').style.color = '#9aa3b2';
+    $('en').innerHTML = 'Press <b>Step ▶</b> to go one step, or <b>Play</b> to run the program.';
+    $('ru').textContent = 'Нажмите «Step ▶», чтобы сделать один шаг, или «Play», чтобы запустить программу.';
+  }
+  applyHide();
+  $('count').textContent = `${idx} / ${RUN.steps.length}`;
+  $('bBack').disabled = idx === 0; $('bStep').disabled = idx >= RUN.steps.length;
+}
+function applyHide() {
+  const h = $('hide').checked && idx > 0;
+  $('en').style.visibility = h ? 'hidden' : 'visible';
+  $('ru').style.display = (!h && $('ruOn').checked) ? 'block' : 'none';
+  $('hiddenNote').style.display = h ? 'block' : 'none';
+}
+function busOn(k, on) { if (!k) return; $('bus_' + k).classList.toggle('on', on); $('vbus_' + k).classList.toggle('on', on); }
+function along(path, u) {
+  const seg = []; let L = 0;
+  for (let i = 1; i < path.length; i++) { const d = Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]); seg.push(d); L += d; }
+  let t = u * L;
+  for (let i = 0; i < seg.length; i++) { if (t <= seg[i] || i === seg.length - 1) { const f = seg[i] ? Math.min(1, t / seg[i]) : 1; return [path[i][0] + (path[i + 1][0] - path[i][0]) * f, path[i][1] + (path[i + 1][1] - path[i][1]) * f]; } t -= seg[i]; }
+}
+const ease = (x) => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+function animate(step, done) {
+  const prev = idx > 1 ? RUN.steps[idx - 2].after : RUN.start;
+  showState(prev, step);
+  // show only the 'before' values but the new step's text/glow
+  const moves = step.moves.slice(); const sp = +$('speed').value;
+  if (step.ctrl) { $('ctrlSig').textContent = step.ctrl; $('ctrlSig').style.opacity = 1; busOn('control', true); }
+  const P = $('pkt');
+  const next = () => {
+    if (!moves.length) { P.style.opacity = 0; busOn('control', false); $('ctrlSig').style.opacity = 0; anim = null; done(); return; }
+    const mv = moves.shift(); P.textContent = mv.label; busOn(mv.bus, true);
+    const L = mv.path.reduce((a, p, i) => i ? a + Math.hypot(p[0] - mv.path[i - 1][0], p[1] - mv.path[i - 1][1]) : 0, 0);
+    const dur = Math.max(500, L * 2.2) / sp; const t0 = performance.now();
+    const tick = (now) => {
+      const u = Math.min(1, (now - t0) / dur); const [x, y] = along(mv.path, ease(u));
+      P.style.opacity = 1; P.style.transform = `translate(${x - P.offsetWidth / 2}px,${y - 20}px)`;
+      if (u < 1) anim = requestAnimationFrame(tick); else { busOn(mv.bus, false); next(); }
+    };
+    anim = requestAnimationFrame(tick);
+  };
+  setTimeout(next, step.moves.length ? 150 / sp : 0);
+}
+function stopAnim() { if (anim) cancelAnimationFrame(anim); anim = null; $('pkt').style.opacity = 0; Object.keys(BUS).forEach((k) => busOn(k, false)); $('ctrlSig').style.opacity = 0; }
+let busy = false;
+function stepFwd(cb) {
+  if (busy || idx >= RUN.steps.length) { if (cb) cb(false); return; }
+  busy = true; idx++; const st = RUN.steps[idx - 1];
+  animate(st, () => { showState(st.after, st); busy = false; if (cb) cb(true); });
+}
+function stepBack() { stopAnim(); busy = false; if (idx === 0) return; idx--; showState(idx ? RUN.steps[idx - 1].after : RUN.start, idx ? RUN.steps[idx - 1] : null); }
+function play() {
+  if (!playing) return;
+  stepFwd((ok) => { if (!ok || idx >= RUN.steps.length) { setPlay(false); return; } setTimeout(play, 700 / +$('speed').value); });
+}
+function setPlay(on) { playing = on; $('bPlay').textContent = on ? '❚❚ Pause' : '▶ Play'; if (on) play(); }
+function load() {
+  try { const mem = parse($('prog').value); $('err').textContent = ''; stopAnim(); busy = false; setPlay(false); RUN = build(mem); idx = 0; showState(RUN.start, null); }
+  catch (e) { $('err').textContent = e; }
+}
+$('bStep').onclick = () => { setPlay(false); stepFwd(); };
+$('bBack').onclick = () => { setPlay(false); stepBack(); };
+$('bPlay').onclick = () => setPlay(!playing);
+$('bReset').onclick = () => { setPlay(false); stopAnim(); busy = false; idx = 0; showState(RUN.start, null); };
+$('bLoad').onclick = load;
+$('bTask').onclick = () => { $('preset').value = 'Subtraction: 9 − 4'; $('prog').value = PRESETS['Subtraction: 9 − 4']; load(); $('speed').value = 0.8; };
+$('hide').onchange = applyHide; $('ruOn').onchange = applyHide;
+Object.keys(PRESETS).forEach((k) => { const o = document.createElement('option'); o.textContent = k; $('preset').appendChild(o); });
+$('preset').onchange = () => { $('prog').value = PRESETS[$('preset').value]; load(); };
+document.addEventListener('keydown', (e) => { if (e.target.tagName === 'TEXTAREA') return; if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); setPlay(false); stepFwd(); } if (e.key === 'ArrowLeft') { setPlay(false); stepBack(); } });
+function fit() { const w = $('wrap').clientWidth; const s = w / 1200; $('board').style.transform = `scale(${s})`; $('wrap').style.height = 660 * s + 'px'; }
+window.addEventListener('resize', fit);
+const startKey = location.hash === '#task' ? 'Subtraction: 9 − 4' : Object.keys(PRESETS)[0];
+$('preset').value = startKey; $('prog').value = PRESETS[startKey]; load(); fit();
+</script>
+</body>
+</html>
